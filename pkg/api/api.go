@@ -53,9 +53,12 @@ func readCsv(pokemonID int) (pokemonJSON []byte, error string) {
 		pokemonMap[pokemonIndex] = line[1]
 	}
 
-	resultPokemon, ok := pokemonMap[pokemonID]
+	pokemonName, ok := pokemonMap[pokemonID]
 
 	if ok {
+		resultPokemon := make(map[string]string)
+		resultPokemon["id"] = strconv.Itoa(pokemonID)
+		resultPokemon["name"] = pokemonName
 		pokemonJSON, _ = json.Marshal(resultPokemon)
 		return
 	}
