@@ -11,5 +11,7 @@ import (
 func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/pokemon/{pokemonID}", api.GetCsv).Methods(http.MethodGet)
+	r.HandleFunc("/pokemons", api.GetFromExternal).Methods(http.MethodGet)
+
 	log.Fatal(http.ListenAndServe(":8080", r))
 }

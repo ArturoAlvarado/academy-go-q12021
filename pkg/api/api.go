@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"pokemon-api/entities"
 	"strconv"
 
 	"github.com/gorilla/mux"
@@ -18,23 +19,22 @@ func GetCsv(w http.ResponseWriter, r *http.Request) {
 
 	if val, ok := pathParams["pokemonID"]; ok {
 		pokemonID, err := strconv.Atoi(val)
-
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{"message": "need a pokemonID"}`))
+		if checkError(err, "need a pokemonID", w) {
 			return
 		}
+
 		pokemonJSON, error := readCsv(pokemonID)
+
 		if error != "" {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(error))
 		}
 		w.Write(pokemonJSON)
 	}
-
 }
 
 func readCsv(pokemonID int) (pokemonJSON []byte, error string) {
+
 	csvFile, err := os.Open("assets/pokemon.csv")
 	if err != nil {
 		fmt.Println(err)
@@ -61,4 +61,59 @@ func readCsv(pokemonID int) (pokemonJSON []byte, error string) {
 	}
 	error = `{"message": "pokemon not found"}`
 	return
+}
+
+//GetFromExternal get pokemon from external api
+func GetFromExternal(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	response, err := http.Get("https://pokeapi.co/api/v2/pokemon")
+
+	if checkError(err, "error getting pokemons", w) {
+		return
+	}
+	defer response.Body.Close()
+
+	data := &entities.Pokemons{}
+	if checkError(err, "error parsing pokemon", w) {
+		return
+	}
+
+	decodeError := json.NewDecoder(response.Body).Decode(&data)
+
+	if checkError(decodeError, "error parsing pokemon", w) {
+		return
+	}
+
+	pokemonJSON, _ := json.Marshal(data.Results)
+
+	file, err := os.Create("./pokemons.csv")
+	defer file.Close()
+
+	if checkError(err, "could not create csv", w) {
+		return
+	}
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	for index, value := range data.Results {
+		s := make([]string, 0)
+		s = append(s, strconv.Itoa(index))
+		s = append(s, value.Name)
+		s = append(s, value.URL)
+		err := writer.Write(s)
+
+		checkError(err, "could write to csv", w)
+	}
+	w.Write(pokemonJSON)
+
+}
+
+func checkError(err error, message string, w http.ResponseWriter) bool {
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(message))
+		return true
+	}
+	return false
 }
