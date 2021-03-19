@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path"
+	"path/filepath"
 	"pokemon-api/entities"
+	"runtime"
 	"strconv"
 
 	"github.com/gorilla/mux"
@@ -23,7 +26,7 @@ func GetCsv(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		pokemonJSON, error := readCsv(pokemonID)
+		pokemonJSON, error := readCsv(pokemonID, w)
 
 		if error != "" {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -33,17 +36,24 @@ func GetCsv(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func readCsv(pokemonID int) (pokemonJSON []byte, error string) {
+func readCsv(pokemonID int, w http.ResponseWriter) (pokemonJSON []byte, error string) {
 
-	csvFile, err := os.Open("assets/pokemon.csv")
-	if err != nil {
-		fmt.Println(err)
+	_, b, _, _ := runtime.Caller(0)
+	d := path.Join(path.Dir(b))
+	base := filepath.Dir(d)
+	fmt.Printf(base)
+
+	fileLocation, _ := filepath.Abs("assets/pokemon.csv")
+	csvFile, err := os.Open(fileLocation)
+	if checkError(err, "couldn't open csv", w) {
+		return
 	}
+
 	defer csvFile.Close()
 
 	csvLines, err := csv.NewReader(csvFile).ReadAll()
-	if err != nil {
-		fmt.Println(err)
+	if checkError(err, "couldn't read csv", w) {
+		return
 	}
 
 	pokemonMap := make(map[int]string)
