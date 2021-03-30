@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"path"
@@ -11,6 +12,8 @@ import (
 	"pokemon-api/entities"
 	"runtime"
 	"strconv"
+	"sync"
+	"sync/atomic"
 
 	"github.com/gorilla/mux"
 )
@@ -120,6 +123,82 @@ func GetFromExternal(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Write(pokemonJSON)
 
+}
+
+func GetConcurrently(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	items, _ := strconv.ParseFloat(r.URL.Query().Get("items"), 64)
+	itemsPerWorkers, _ := strconv.ParseFloat(r.URL.Query().Get("items_per_workers"), 64)
+	idtype := r.URL.Query().Get("type")
+
+	numOfWorker := math.Ceil(items / itemsPerWorkers)
+
+	result, err := readCsvConcurrently(w, numOfWorker, items, itemsPerWorkers, idtype)
+	if err != "" {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err))
+	}
+	w.Write(result)
+
+}
+
+type SafeMap struct {
+	mu  sync.Mutex
+	res map[int]string
+}
+
+var (
+	indexCounter int32
+	resultMap    = SafeMap{res: make(map[int]string)}
+	waitgroup    sync.WaitGroup
+)
+
+func worker(id int, lines [][]string, jobs int) {
+	defer waitgroup.Done()
+	for i := 0; i < jobs; i++ {
+		resultMap.mu.Lock()
+		line := lines[indexCounter]
+		pokemonIndex, _ := strconv.Atoi(line[0])
+		resultMap.res[pokemonIndex] = line[1]
+		atomic.AddInt32(&indexCounter, 2)
+		resultMap.mu.Unlock()
+		runtime.Gosched()
+	}
+}
+
+func readCsvConcurrently(w http.ResponseWriter, numOfWorker float64, items float64, itemsPerWorkers float64, idtype string) (pokemonJSON []byte, error string) {
+	fileLocation, _ := filepath.Abs("assets/pokemons.csv")
+	csvFile, err := os.Open(fileLocation)
+	indexCounter = 0
+	resultMap.res = make(map[int]string)
+	if idtype == "odd" {
+		indexCounter = 1
+	}
+
+	if checkError(err, "couldn't open csv", w) {
+		return
+	}
+
+	defer csvFile.Close()
+
+	csvLines, err := csv.NewReader(csvFile).ReadAll()
+
+	if checkError(err, "couldn't read csv", w) {
+		return
+	}
+
+	waitgroup.Add(int(numOfWorker))
+
+	for w := 1; w <= int(numOfWorker); w++ {
+		fmt.Println(resultMap.res)
+		go worker(w, csvLines, int(itemsPerWorkers))
+	}
+
+	waitgroup.Wait()
+
+	pokemonJSON, _ = json.Marshal(resultMap.res)
+	return
 }
 
 func checkError(err error, message string, w http.ResponseWriter) bool {
