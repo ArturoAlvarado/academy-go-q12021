@@ -3,11 +3,9 @@ package api
 import (
 	"encoding/csv"
 	"encoding/json"
-	"fmt"
 	"math"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"pokemon-api/entities"
 	"runtime"
@@ -40,11 +38,6 @@ func GetCsv(w http.ResponseWriter, r *http.Request) {
 }
 
 func readCsv(pokemonID int, w http.ResponseWriter) (pokemonJSON []byte, error string) {
-
-	_, b, _, _ := runtime.Caller(0)
-	d := path.Join(path.Dir(b))
-	base := filepath.Dir(d)
-	fmt.Printf(base)
 
 	fileLocation, _ := filepath.Abs("assets/pokemon.csv")
 	csvFile, err := os.Open(fileLocation)
@@ -132,6 +125,11 @@ func GetConcurrently(w http.ResponseWriter, r *http.Request) {
 	itemsPerWorkers, _ := strconv.ParseFloat(r.URL.Query().Get("items_per_workers"), 64)
 	idtype := r.URL.Query().Get("type")
 
+	if items == 0 || itemsPerWorkers == 0 || (idtype != "even" && idtype != "odd") {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("{message: invalid params}"))
+		return
+	}
 	numOfWorker := math.Ceil(items / itemsPerWorkers)
 
 	result, err := readCsvConcurrently(w, numOfWorker, items, itemsPerWorkers, idtype)
@@ -158,10 +156,14 @@ func worker(id int, lines [][]string, jobs int) {
 	defer waitgroup.Done()
 	for i := 0; i < jobs; i++ {
 		resultMap.mu.Lock()
-		line := lines[indexCounter]
-		pokemonIndex, _ := strconv.Atoi(line[0])
-		resultMap.res[pokemonIndex] = line[1]
-		atomic.AddInt32(&indexCounter, 2)
+		if indexCounter < int32(len(lines)) {
+			line := lines[indexCounter]
+			pokemonIndex, _ := strconv.Atoi(line[0])
+			resultMap.res[pokemonIndex] = line[1]
+			atomic.AddInt32(&indexCounter, 2)
+		} else {
+			i = jobs
+		}
 		resultMap.mu.Unlock()
 		runtime.Gosched()
 	}
@@ -176,7 +178,8 @@ func readCsvConcurrently(w http.ResponseWriter, numOfWorker float64, items float
 		indexCounter = 1
 	}
 
-	if checkError(err, "couldn't open csv", w) {
+	if err != nil {
+		error = "{message:couldn't open csv}"
 		return
 	}
 
@@ -184,20 +187,26 @@ func readCsvConcurrently(w http.ResponseWriter, numOfWorker float64, items float
 
 	csvLines, err := csv.NewReader(csvFile).ReadAll()
 
-	if checkError(err, "couldn't read csv", w) {
+	if err != nil {
+		error = "{message:couldn't read csv}"
 		return
 	}
 
 	waitgroup.Add(int(numOfWorker))
 
 	for w := 1; w <= int(numOfWorker); w++ {
-		fmt.Println(resultMap.res)
 		go worker(w, csvLines, int(itemsPerWorkers))
 	}
 
 	waitgroup.Wait()
 
-	pokemonJSON, _ = json.Marshal(resultMap.res)
+	pokemonJSON, err = json.Marshal(resultMap.res)
+
+	if err != nil {
+		error = "{message:couldn't parse response}"
+		return
+	}
+
 	return
 }
 

@@ -56,3 +56,27 @@ func TestGetPokemonFromExternal(t *testing.T) {
 			rr.Body.String(), expected)
 	}
 }
+
+func TestGetConcurrentlyFromExternal(t *testing.T) {
+	req, err := http.NewRequest("GET", "/concurrently?items=2&type=even&items_per_workers=1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	handler := mux.NewRouter()
+
+	handler.HandleFunc("/concurrently", api.GetConcurrently)
+
+	handler.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+	expected := `{"0":"bulbasaur","2":"venusaur"}`
+
+	if rr.Body.String() != expected {
+		t.Errorf("handler returned unexpected body: got %v want %v",
+			rr.Body.String(), expected)
+	}
+}
