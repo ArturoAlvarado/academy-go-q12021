@@ -1,5 +1,9 @@
 package entities
 
+import (
+	"sync"
+)
+
 //Pokemons APi response struct
 type Pokemons struct {
 	count    int
@@ -12,4 +16,9 @@ type Pokemons struct {
 type Pokemon struct {
 	Name string `json:"name,omitempty"`
 	URL  string `json:"url,omitempty"`
+}
+
+type SafeMap struct {
+	Mu  sync.Mutex
+	Res map[int]string
 }
