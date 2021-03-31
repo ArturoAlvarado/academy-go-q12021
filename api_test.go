@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
-	"pokemon-api/pkg/api"
+	"pokemon-api/pkg/handlers"
 	"testing"
 
 	"github.com/gorilla/mux"
@@ -17,7 +17,7 @@ func TestGetPokemonFromCsv(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler := mux.NewRouter()
 
-	handler.HandleFunc("/pokemon/{pokemonID}", api.GetCsv)
+	handler.HandleFunc("/pokemon/{pokemonID}", handlers.GetCsv)
 
 	handler.ServeHTTP(rr, req)
 
@@ -41,7 +41,7 @@ func TestGetPokemonFromExternal(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler := mux.NewRouter()
 
-	handler.HandleFunc("/pokemons", api.GetFromExternal)
+	handler.HandleFunc("/pokemons", handlers.GetFromExternal)
 
 	handler.ServeHTTP(rr, req)
 
@@ -65,7 +65,7 @@ func TestGetConcurrentlyFromExternal(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler := mux.NewRouter()
 
-	handler.HandleFunc("/concurrently", api.GetConcurrently)
+	handler.HandleFunc("/concurrently", handlers.GetConcurrently)
 
 	handler.ServeHTTP(rr, req)
 
